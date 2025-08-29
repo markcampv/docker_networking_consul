@@ -1,6 +1,9 @@
 # Consul Service Mesh Docker Lab (v2) — 2 DCs + Failover 
 
-This version uses **Envoy proxy** for sidecars. It spins up:
+Tested Consul version: hashicorp/consul:1.20.5
+Tested Envoy version: 1.32.0
+
+This version uses **Envoy proxy** for sidecars for Mesh gateway Wan Federation. It spins up:
 - **dc1**: 3 servers, 2 clients
   - `frontend` (calls `backend` via upstream on `127.0.0.1:5000`)
   - `backend` (v1-dc1)
