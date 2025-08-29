@@ -14,6 +14,7 @@ docker compose exec consul-client-dc1-1 curl -s http://127.0.0.1:6060/ | jq .
 
 # See resolver and defaults are in place
 docker compose exec consul-client-dc1-1 consul config read -kind service-resolver -name backend
+
 docker compose exec consul-client-dc1-1 consul config read -kind service-defaults -name backend
 
 # List services (should include mesh-gateway)
@@ -21,6 +22,8 @@ docker compose exec consul-client-dc1-1 consul catalog services
 
 # Check gateway admins
 docker compose exec consul-client-dc1-1 curl -s http://127.0.0.1:19010/listeners | head -n 40
+
+
 docker compose exec consul-client-dc2-1 curl -s http://127.0.0.1:19010/listeners | head -n 40
 
 # Look for endpoints pointing to dc2 backend sidecar/mesh path
