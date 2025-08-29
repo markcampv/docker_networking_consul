@@ -23,10 +23,35 @@ UIs:
 docker compose exec consul-client-dc1-1 curl -s http://127.0.0.1:6060/ | jq .
 ```
 
+Expected output(backend in DC1)
+
+```bash
+{
+  "backend": {
+    "dc_hint": "unknown",
+    "service": "backend",
+    "version": "v1-dc1"
+  },
+  "service": "frontend"
+}
+```
 ## Failover
 ```bash
 docker compose stop app-backend-dc1 proxy-backend-dc1
 docker compose exec consul-client-dc1-1 curl -s http://127.0.0.1:6060/ | jq .
+```
+
+Expected output(backend in DC2)
+
+```bash
+{
+  "backend": {
+    "dc_hint": "unknown",
+    "service": "backend",
+    "version": "v1-dc2"
+  },
+  "service": "frontend"
+}
 ```
 
 ## Clean up
