@@ -1,0 +1,533 @@
+services:
+  pki-setup:
+    image: hashicorp/consul:1.20.5
+    command:
+      - sh
+      - -lc
+      - |
+        set -euo pipefail
+
+        out_root="/pki"
+        mkdir -p "$$out_root/ca" "$$out_root/agents"
+
+        echo "==> Generating single Consul Agent CA"
+        cd "$$out_root/ca"
+        consul tls ca create -domain "consul" -days 3650 >/dev/null
+        echo "==> Saved consul-agent-ca.pem and consul-agent-ca-key.pem"
+
+        # Make files available under both names expected by your configs
+        cp consul-agent-ca.pem      ca.pem
+        cp consul-agent-ca-key.pem  ca-key.pem
+
+        CA_PEM="$$out_root/ca/consul-agent-ca.pem"
+        CA_KEY="$$out_root/ca/consul-agent-ca-key.pem"
+
+        issue_server () {
+          dc="$$1"; node="$$2"
+          echo "==> Server cert for $$node ($$dc)"
+          cd "$$out_root/agents"
+          consul tls cert create \
+            -server \
+            -dc "$$dc" \
+            -domain "consul" \
+            -node "$$node" \
+            -additional-dnsname "server.$$dc.consul" \
+            -ca "$$CA_PEM" \
+            -key "$$CA_KEY" >/dev/null
+          cp "$${dc}-server-consul-0.pem"     "$$out_root/agents/$${node}.pem"
+          cp "$${dc}-server-consul-0-key.pem" "$$out_root/agents/$${node}-key.pem"
+          rm -f "$${dc}-server-consul-0.pem" "$${dc}-server-consul-0-key.pem"
+        }
+
+        issue_client () {
+          dc="$$1"; node="$$2"
+          echo "==> Client cert for $$node ($$dc)"
+          cd "$$out_root/agents"
+          consul tls cert create \
+            -client \
+            -dc "$$dc" \
+            -ca "$$CA_PEM" \
+            -key "$$CA_KEY" >/dev/null
+          cp "$${dc}-client-consul-0.pem"     "$$out_root/agents/$${node}.pem"
+          cp "$${dc}-client-consul-0-key.pem" "$$out_root/agents/$${node}-key.pem"
+          rm -f "$${dc}-client-consul-0.pem" "$${dc}-client-consul-0-key.pem"
+        }
+
+        # --- Servers
+        issue_server dc1 server-dc1-1
+        issue_server dc1 server-dc1-2
+        issue_server dc1 server-dc1-3
+        issue_server dc2 server-dc2-1
+        issue_server dc2 server-dc2-2
+        issue_server dc2 server-dc2-3
+
+        # --- Clients
+        issue_client dc1 client-dc1-1
+        issue_client dc1 client-dc1-2
+        issue_client dc2 client-dc2-1
+
+        echo "==> Locking down permissions"
+        chown -R 100:100 "$$out_root"
+        chmod 0644 "$$out_root/ca/"*.pem "$$out_root/agents/"*.pem || true
+        chmod 0640 "$$out_root/ca/"*key.pem "$$out_root/agents/"*-key.pem || true
+
+        echo "==> PKI generation complete."
+    volumes:
+      - pki:/pki
+    networks:
+      - consul
+    restart: "no"
+  # ======================
+  # DC1: 3 Consul servers
+  # ======================
+  consul-server-dc1-1:
+    image: hashicorp/consul:1.20.5
+    depends_on:
+      pki-setup:
+        condition: service_completed_successfully
+    command:
+      ["consul","agent",
+       "-server","-ui","-node=server-dc1-1",
+       "-bootstrap-expect=3","-datacenter=dc1",
+       "-bind=0.0.0.0","-client=0.0.0.0",
+       "-data-dir=/consul/data",
+       "-retry-join=consul-server-dc1-2",
+       "-retry-join=consul-server-dc1-3",
+       "-config-dir=/consul/config"]
+    networks: [consul]
+    ports:
+      - "8500:8500"
+      - "8302:8302"
+      - "8600:8600/udp"
+      - "8502:8502"
+      - "8503:8503"
+    volumes:
+      - ./dc1/servers/server1/config:/consul/config
+      - dc1-data-1:/consul/data
+      - pki:/pki
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL","consul operator raft list-peers | grep -q leader"]
+      interval: 2s
+      timeout: 1s
+      retries: 30
+      start_period: 5s
+
+  consul-server-dc1-2:
+    image: hashicorp/consul:1.20.5
+    depends_on:
+      pki-setup:
+        condition: service_completed_successfully
+    command:
+      ["consul","agent",
+       "-server","-ui","-node=server-dc1-2",
+       "-bootstrap-expect=3","-datacenter=dc1",
+       "-bind=0.0.0.0","-client=0.0.0.0",
+       "-data-dir=/consul/data",
+       "-retry-join=consul-server-dc1-1",
+       "-retry-join=consul-server-dc1-3",
+       "-config-dir=/consul/config"]
+    networks: [consul]
+    volumes:
+      - ./dc1/servers/server2/config:/consul/config
+      - dc1-data-2:/consul/data
+      - pki:/pki
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL","consul operator raft list-peers | grep -q leader"]
+      interval: 2s
+      timeout: 1s
+      retries: 30
+      start_period: 5s
+
+  consul-server-dc1-3:
+    image: hashicorp/consul:1.20.5
+    depends_on:
+      pki-setup:
+        condition: service_completed_successfully
+    command:
+      ["consul","agent",
+       "-server","-ui","-node=server-dc1-3",
+       "-bootstrap-expect=3","-datacenter=dc1",
+       "-bind=0.0.0.0","-client=0.0.0.0",
+       "-data-dir=/consul/data",
+       "-retry-join=consul-server-dc1-1",
+       "-retry-join=consul-server-dc1-2",
+       "-config-dir=/consul/config"]
+    networks: [consul]
+    volumes:
+      - ./dc1/servers/server3/config:/consul/config
+      - dc1-data-3:/consul/data
+      - pki:/pki
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL","consul operator raft list-peers | grep -q leader"]
+      interval: 2s
+      timeout: 1s
+      retries: 30
+      start_period: 5s
+
+  # ======================
+  # DC2: 3 Consul servers
+  # ======================
+  consul-server-dc2-1:
+    image: hashicorp/consul:1.20.5
+    depends_on:
+      pki-setup:
+        condition: service_completed_successfully
+    command:
+      ["consul","agent",
+       "-server","-ui","-node=server-dc2-1",
+       "-bootstrap-expect=3","-datacenter=dc2",
+       "-bind=0.0.0.0","-client=0.0.0.0",
+       "-data-dir=/consul/data",
+       "-retry-join=consul-server-dc2-2",
+       "-retry-join=consul-server-dc2-3",
+       "-config-dir=/consul/config"]
+    networks: [consul]
+    ports:
+      - "18500:8500"
+      - "18600:8600/udp"
+      - "18503:8503"
+    volumes:
+      - ./dc2/servers/server1/config:/consul/config
+      - dc2-data-1:/consul/data
+      - pki:/pki
+    restart: unless-stopped
+
+  consul-server-dc2-2:
+    image: hashicorp/consul:1.20.5
+    depends_on:
+      pki-setup:
+        condition: service_completed_successfully
+    command:
+      ["consul","agent",
+       "-server","-ui","-node=server-dc2-2",
+       "-bootstrap-expect=3","-datacenter=dc2",
+       "-bind=0.0.0.0","-client=0.0.0.0",
+       "-data-dir=/consul/data",
+       "-retry-join=consul-server-dc2-1",
+       "-retry-join=consul-server-dc2-3",
+       "-config-dir=/consul/config"]
+    networks: [consul]
+    volumes:
+      - ./dc2/servers/server2/config:/consul/config
+      - dc2-data-2:/consul/data
+      - pki:/pki
+    restart: unless-stopped
+
+  consul-server-dc2-3:
+    image: hashicorp/consul:1.20.5
+    depends_on:
+      pki-setup:
+        condition: service_completed_successfully
+    command:
+      ["consul","agent",
+       "-server","-ui","-node=server-dc2-3",
+       "-bootstrap-expect=3","-datacenter=dc2",
+       "-bind=0.0.0.0","-client=0.0.0.0",
+       "-data-dir=/consul/data",
+       "-retry-join=consul-server-dc2-1",
+       "-retry-join=consul-server-dc2-2",
+       "-config-dir=/consul/config"]
+    networks: [consul]
+    volumes:
+      - ./dc2/servers/server3/config:/consul/config
+      - dc2-data-3:/consul/data
+      - pki:/pki
+    restart: unless-stopped
+
+  # ======================================================
+  # DC1 Clients + Apps + Envoy sidecars (share client netns)
+  # ======================================================
+  consul-client-dc1-1:
+    image: hashicorp/consul:1.20.5
+    depends_on:
+      pki-setup:
+        condition: service_completed_successfully
+      consul-server-dc1-1:
+        condition: service_healthy
+      consul-server-dc1-2:
+        condition: service_started
+      consul-server-dc1-3:
+        condition: service_started
+    command:
+      ["consul","agent",
+       "-node=client-dc1-1","-datacenter=dc1",
+       "-bind=0.0.0.0","-client=0.0.0.0",
+       "-data-dir=/consul/data",
+       "-retry-join=consul-server-dc1-1",
+       "-retry-join=consul-server-dc1-2",
+       "-retry-join=consul-server-dc1-3",
+       "-config-dir=/consul/config"]
+    networks: [consul]
+    ports:
+      - "28502:8502"
+      - "28503:8503"
+
+    volumes:
+      - ./dc1/clients/client1/config:/consul/config
+      - pki:/pki
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD","consul","info"]
+      interval: 2s
+      timeout: 1s
+      retries: 25
+      start_period: 5s
+
+  app-frontend:
+    build:
+      context: ./dc1/apps/frontend
+    environment:
+      - PORT=6060
+    depends_on:
+      consul-client-dc1-1:
+        condition: service_healthy
+    network_mode: "service:consul-client-dc1-1"
+    restart: unless-stopped
+
+  proxy-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.envoy
+    depends_on:
+      consul-client-dc1-1:
+        condition: service_healthy
+      app-frontend:
+        condition: service_started
+    network_mode: "service:consul-client-dc1-1"
+    environment:
+      - CONSUL_GRPC_CACERT=/pki/ca/consul-agent-ca.pem
+    command: ["consul","connect","envoy","-sidecar-for","frontend","-admin-bind","0.0.0.0:19000"]
+    volumes:
+      - pki:/pki
+    restart: unless-stopped  
+
+  consul-client-dc1-2:
+    image: hashicorp/consul:1.20.5
+    depends_on:
+      pki-setup:
+        condition: service_completed_successfully
+      consul-server-dc1-1:
+        condition: service_healthy
+      consul-server-dc1-2:
+        condition: service_started
+      consul-server-dc1-3:
+        condition: service_started
+    command:
+      ["consul","agent",
+       "-node=client-dc1-2","-datacenter=dc1",
+       "-bind=0.0.0.0","-client=0.0.0.0",
+       "-data-dir=/consul/data",
+       "-retry-join=consul-server-dc1-1",
+       "-retry-join=consul-server-dc1-2",
+       "-retry-join=consul-server-dc1-3",
+       "-config-dir=/consul/config"]
+    networks:
+      consul:
+        aliases:
+          - mesh-gateway-dc1    
+    ports:
+      - "38502:8502"
+      - "38503:8503"
+
+    volumes:
+      - ./dc1/clients/client2/config:/consul/config
+      - pki:/pki
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD","consul","info"]
+      interval: 2s
+      timeout: 1s
+      retries: 25
+      start_period: 5s
+
+  app-backend-dc1:
+    build:
+      context: ./dc1/apps/backend
+    environment:
+      - PORT=7000
+      - VERSION=v1-dc1
+    depends_on:
+      consul-client-dc1-2:
+        condition: service_healthy
+    network_mode: "service:consul-client-dc1-2"
+    restart: unless-stopped
+
+  proxy-backend-dc1:
+    build:
+      context: .
+      dockerfile: Dockerfile.envoy
+    depends_on:
+      consul-client-dc1-2:
+        condition: service_healthy
+      app-backend-dc1:
+        condition: service_started
+    network_mode: "service:consul-client-dc1-2"
+    environment:
+      - CONSUL_GRPC_CACERT=/pki/ca/consul-agent-ca.pem
+    command: ["consul","connect","envoy","-sidecar-for","backend","-admin-bind","0.0.0.0:19000"]
+    volumes:
+      - pki:/pki
+    restart: unless-stopped
+  
+
+  # =======================================
+  # DC2 Client + Backend + Envoy sidecar
+  # =======================================
+  consul-client-dc2-1: 
+    image: hashicorp/consul:1.20.5
+    depends_on:
+      pki-setup:
+        condition: service_completed_successfully
+      consul-server-dc2-1:
+        condition: service_started
+      consul-server-dc2-2:
+        condition: service_started
+      consul-server-dc2-3:
+        condition: service_started
+    command:
+      ["consul","agent",
+       "-node=client-dc2-1","-datacenter=dc2",
+       "-bind=0.0.0.0","-client=0.0.0.0",
+       "-data-dir=/consul/data",
+       "-retry-join=consul-server-dc2-1",
+       "-retry-join=consul-server-dc2-2",
+       "-retry-join=consul-server-dc2-3",
+       "-config-dir=/consul/config"]
+    networks:
+      consul:
+        aliases:
+          - mesh-gateway-dc2  
+    ports:
+      - "48502:8502"
+      - "48503:8503"
+
+    volumes:
+      - ./dc2/clients/client1/config:/consul/config
+      - pki:/pki
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD","consul","info"]
+      interval: 2s
+      timeout: 1s
+      retries: 25
+      start_period: 5s
+
+  app-backend-dc2:
+    build:
+      context: ./dc2/apps/backend
+    environment:
+      - PORT=7000
+      - VERSION=v1-dc2
+    depends_on:
+      consul-client-dc2-1:
+        condition: service_healthy
+    network_mode: "service:consul-client-dc2-1"
+    restart: unless-stopped
+
+  proxy-backend-dc2:
+    build:
+      context: .
+      dockerfile: Dockerfile.envoy
+    depends_on:
+      consul-client-dc2-1:
+        condition: service_healthy
+      app-backend-dc2:
+        condition: service_started
+    network_mode: "service:consul-client-dc2-1"
+    environment:
+      - CONSUL_GRPC_CACERT=/pki/ca/consul-agent-ca.pem
+    command: ["consul","connect","envoy","-sidecar-for","backend","-admin-bind","0.0.0.0:19000"]
+    volumes:
+      - pki:/pki
+    restart: unless-stopped
+  
+
+  # =======================================
+  # Mesh gateways (self-registering; bind to eth0 IP)
+  # =======================================
+  mesh-gateway-dc1:
+    network_mode: "service:consul-client-dc1-1"
+    build:
+      context: .
+      dockerfile: Dockerfile.envoy
+    depends_on:
+      pki-setup:
+        condition: service_completed_successfully
+      consul-client-dc1-1:
+        condition: service_healthy
+    environment:
+      - CONSUL_GRPC_CACERT=/pki/ca/consul-agent-ca.pem
+    volumes:
+      - pki:/pki
+    command: ["sh","-lc","IP=$$(ip -o -4 addr show dev eth0 | awk '{print $$4}' | cut -d/ -f1); \
+      consul connect envoy -mesh-gateway -register -service mesh-gateway \
+      -address $$IP:8443 -wan-address $$IP:8443 \
+      -expose-servers -admin-bind 0.0.0.0:19010"]
+    restart: unless-stopped
+
+  mesh-gateway-dc2:
+    network_mode: "service:consul-client-dc2-1"
+    build:
+      context: .
+      dockerfile: Dockerfile.envoy
+    depends_on:
+      pki-setup:
+        condition: service_completed_successfully
+      consul-client-dc2-1:
+        condition: service_healthy
+    environment:
+      - CONSUL_GRPC_CACERT=/pki/ca/consul-agent-ca.pem
+    volumes:
+      - pki:/pki
+    command: ["sh","-lc","IP=$$(ip -o -4 addr show dev eth0 | awk '{print $$4}' | cut -d/ -f1); \
+      consul connect envoy -mesh-gateway -register -service mesh-gateway \
+      -address $$IP:8443 -wan-address $$IP:8443 \
+      -expose-servers -admin-bind 0.0.0.0:19010"]
+    restart: unless-stopped
+  
+  # ===========================================
+  # One-shot: write config entries after leader
+  # ===========================================
+  setup-config:
+    image: hashicorp/consul:1.20.5
+    depends_on:
+      consul-server-dc1-1:
+        condition: service_healthy
+      consul-server-dc1-2:
+        condition: service_started
+      consul-server-dc1-3:
+        condition: service_started
+    command:
+      - sh
+      - -lc
+      - |
+        set -e
+        echo 'Waiting for Docker DNS for consul-server-dc1-1...'
+        until getent hosts consul-server-dc1-1 >/dev/null; do sleep 1; done
+        export CONSUL_HTTP_ADDR=http://consul-server-dc1-1:8500
+        echo 'Waiting for dc1 leader...'
+        until consul operator raft list-peers | grep -q leader; do sleep 1; done
+        echo 'Writing config entries...'
+        consul config write /work/config-entries/backend-resolver.hcl
+        consul config write /work/config-entries/frontend-intention.hcl
+        consul config write /work/config-entries/backend-defaults.hcl
+        echo 'Done.'
+    volumes:
+      - ./config-entries:/work/config-entries
+    networks: [consul]
+    restart: "no"
+
+networks:
+  consul: {}
+
+volumes:
+  pki: {}
+  dc1-data-1: {}
+  dc1-data-2: {}
+  dc1-data-3: {}
+  dc2-data-1: {}
+  dc2-data-2: {}
+  dc2-data-3: {}

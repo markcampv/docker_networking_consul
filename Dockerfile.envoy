@@ -1,0 +1,25 @@
+# syntax=docker/dockerfile:1
+
+# Envoy version (multi-arch image; works on linux/arm64/aarch64)
+ARG ENVOY_VERSION=v1.32.0
+
+# Stage: Envoy with runtime tools we need (ip, curl, certs)
+FROM envoyproxy/envoy:${ENVOY_VERSION} AS envoy-with-tools
+USER root
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends iproute2 ca-certificates curl \
+ && rm -rf /var/lib/apt/lists/*
+# ensure CA store exists/updated
+RUN update-ca-certificates || true
+
+# Stage: pull Consul CLI
+FROM hashicorp/consul:1.20.5 AS consul-cli
+
+# Final image: Envoy base + Consul binary
+FROM envoy-with-tools
+
+# Add Consul binary
+COPY --from=consul-cli /bin/consul /bin/consul
+
+# Default command (compose will override with `consul connect envoy ...`)
+CMD ["sh","-lc","consul version && envoy --version && sleep infinity"]

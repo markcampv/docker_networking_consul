@@ -1,6 +1,6 @@
 # Consul Service Mesh Docker Lab (v2) — 2 DCs + Failover (No Envoy Required)
 
-This version uses **Consul's built-in Connect proxy** for sidecars (no Envoy or extra binaries). It spins up:
+This version uses **Envoy proxy** for sidecars. It spins up:
 - **dc1**: 3 servers, 2 clients
   - `frontend` (calls `backend` via upstream on `127.0.0.1:5000`)
   - `backend` (v1-dc1)
