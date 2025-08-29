@@ -1,4 +1,4 @@
-# Consul Service Mesh Docker Lab (v2) — 2 DCs + Failover (No Envoy Required)
+# Consul Service Mesh Docker Lab (v2) — 2 DCs + Failover 
 
 This version uses **Envoy proxy** for sidecars. It spins up:
 - **dc1**: 3 servers, 2 clients
