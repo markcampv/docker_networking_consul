@@ -1,6 +1,9 @@
 service {
   name = "backend"
   port = 7000
+  meta = {
+  version = "dc2"
+}
   connect { sidecar_service {} }
   check {
     name     = "http-backend"

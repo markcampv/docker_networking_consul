@@ -514,6 +514,11 @@ services:
         consul config write /work/config-entries/backend-resolver.hcl
         consul config write /work/config-entries/frontend-intention.hcl
         consul config write /work/config-entries/backend-defaults.hcl
+        consul config write /work/config-entries/backend-resolver-dc1.hcl
+        consul config write /work/config-entries/backend-resolver-dc2.hcl
+        consul config write /work/config-entries/backend-splitter.hcl
+        consul config write /work/config-entries/virtual-defaults-dc1.hcl
+        consul config write /work/config-entries/virtual-defaults-dc2.hcl
         echo 'Done.'
     volumes:
       - ./config-entries:/work/config-entries

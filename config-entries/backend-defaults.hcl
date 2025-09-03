@@ -3,5 +3,5 @@ Name = "backend"
 Protocol = "http"
 
 MeshGateway {
-  Mode = "remote"
+  Mode = "local"
 }

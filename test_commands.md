@@ -48,3 +48,18 @@ Two clusters for backend on the frontend sidecar:
 failover-target~0 … ::172.21.0.9:21000 → your local dc1 backend sidecar (active / healthy; has requests).
 
 failover-target~1 … ::172.21.0.10:8443 → the dc1 mesh-gateway endpoint (which will forward to dc2). Healthy but rq_total::0 so far — expected until you actually fail over.
+
+Logs during failover
+
+Front end:
+
+mesh-gateway-dc1-1  | [2025-08-29 17:23:20.799][15][debug][upstream] [source/extensions/clusters/eds/eds.cc:428] EDS hosts or locality weights changed for cluster: backend.default.dc1.internal.e88fa74c-feed-3798-b55d-43bf8e4c010c.consul current hosts 1 priority 0
+mesh-gateway-dc1-1  | [2025-08-29 17:23:20.799][15][trace][upstream] [source/common/upstream/upstream_impl.cc:2218] Local locality: 
+
+
+Mesh gateway dc1
+
+proxy-frontend-1  | [2025-08-29 17:23:20.799][1][debug][config] [source/extensions/config_subscription/grpc/new_grpc_mux_impl.cc:158] Received DeltaDiscoveryResponse for type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment at version 
+proxy-frontend-1  | [2025-08-29 17:23:20.799][1][debug][upstream] [source/common/upstream/upstream_impl.cc:484] transport socket match, socket default selected for host with address 172.21.0.10:21000
+proxy-frontend-1  | [2025-08-29 17:23:20.799][1][debug][upstream] [source/extensions/clusters/eds/eds.cc:428] EDS hosts or locality weights changed for cluster: failover-target~0~backend.default.dc1.internal.e88fa74c-feed-3798-b55d-43bf8e4c010c.consul current hosts 1 priority 0
+proxy-frontend-1  | [2025-08-29 17:23:20.799][37][debug][upstream] [source/common/upstream/cluster_manager_impl.cc:1560] membership update for TLS cluster failover-target~0~backend.default.dc1.internal.e88fa74c-feed-3798-b55d-43bf8e4c010c.consul added 0 removed 0
