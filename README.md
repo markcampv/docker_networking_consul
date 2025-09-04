@@ -58,6 +58,56 @@ Expected output(backend in DC2)
 }
 ```
 
+## Split requests w/ Failover
+
+Add the following config entries by running the command below: 
+
+```bash
+docker compose exec consul-server-dc1-1 sh -lc '  set -e
+  consul config write /work/config-entries/virtual-defaults-dc1.hcl &&
+  consul config write /work/config-entries/virtual-defaults-dc2.hcl &&
+  consul config write /work/config-entries/backend-resolver-dc1.hcl &&
+  consul config write /work/config-entries/backend-resolver-dc2.hcl &&
+  consul config write /work/config-entries/backend-splitter.hcl
+'
+ ```  
+
+Run a loop to observe the requests being split between backend dc1 and dc2
+
+```bash
+while true; do docker compose exec consul-client-dc1-1 curl -s http://127.0.0.1:6060/ | jq .; done
+```
+
+Expected output
+
+```bash
+{
+  "backend": {
+    "dc_hint": "unknown",
+    "service": "backend",
+    "version": "v1-dc1"
+  },
+  "service": "frontend"
+}
+{
+  "backend": {
+    "dc_hint": "unknown",
+    "service": "backend",
+    "version": "v1-dc2"
+  },
+  "service": "frontend"
+}
+{
+  "backend": {
+    "dc_hint": "unknown",
+    "service": "backend",
+    "version": "v1-dc1"
+  },
+  "service": "frontend"
+}
+```
+
+
 ## Clean up
 ```bash
 docker compose down -v

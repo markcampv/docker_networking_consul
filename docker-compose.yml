@@ -102,6 +102,7 @@ services:
       - "8502:8502"
       - "8503:8503"
     volumes:
+      - ./config-entries:/work/config-entries
       - ./dc1/servers/server1/config:/consul/config
       - dc1-data-1:/consul/data
       - pki:/pki
@@ -129,6 +130,7 @@ services:
        "-config-dir=/consul/config"]
     networks: [consul]
     volumes:
+      - ./config-entries:/work/config-entries
       - ./dc1/servers/server2/config:/consul/config
       - dc1-data-2:/consul/data
       - pki:/pki
@@ -156,6 +158,7 @@ services:
        "-config-dir=/consul/config"]
     networks: [consul]
     volumes:
+      - ./config-entries:/work/config-entries
       - ./dc1/servers/server3/config:/consul/config
       - dc1-data-3:/consul/data
       - pki:/pki
@@ -190,6 +193,7 @@ services:
       - "18600:8600/udp"
       - "18503:8503"
     volumes:
+      - ./config-entries:/work/config-entries
       - ./dc2/servers/server1/config:/consul/config
       - dc2-data-1:/consul/data
       - pki:/pki
@@ -211,6 +215,7 @@ services:
        "-config-dir=/consul/config"]
     networks: [consul]
     volumes:
+      - ./config-entries:/work/config-entries
       - ./dc2/servers/server2/config:/consul/config
       - dc2-data-2:/consul/data
       - pki:/pki
@@ -232,6 +237,7 @@ services:
        "-config-dir=/consul/config"]
     networks: [consul]
     volumes:
+      - ./config-entries:/work/config-entries
       - ./dc2/servers/server3/config:/consul/config
       - dc2-data-3:/consul/data
       - pki:/pki
@@ -514,11 +520,6 @@ services:
         consul config write /work/config-entries/backend-resolver.hcl
         consul config write /work/config-entries/frontend-intention.hcl
         consul config write /work/config-entries/backend-defaults.hcl
-        consul config write /work/config-entries/backend-resolver-dc1.hcl
-        consul config write /work/config-entries/backend-resolver-dc2.hcl
-        consul config write /work/config-entries/backend-splitter.hcl
-        consul config write /work/config-entries/virtual-defaults-dc1.hcl
-        consul config write /work/config-entries/virtual-defaults-dc2.hcl
         echo 'Done.'
     volumes:
       - ./config-entries:/work/config-entries
